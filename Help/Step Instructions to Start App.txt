@@ -1,0 +1,17 @@
+Using Docker Containerization
+Ensure Docker Desktop is open and running on your system.
+
+Open your terminal in the root of the project directory.
+
+Build the container image:
+
+Bash
+docker build -t carfinder-app .
+Spin up the container:
+
+Bash
+docker run -d -p 8080:8080 --name carfinder-container carfinder-app
+Open your web browser and navigate to:
+
+Plaintext
+http://localhost:8080
