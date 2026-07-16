@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Car Finder App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .main-card {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <header class="text-center mb-5">
+            <h1 class="display-5 fw-bold text-primary">🚗 Vehicle Directory App</h1>
+            <p class="text-muted">Retrieve vehicle types and models instantly via the NHTSA Database</p>
+        </header>
+
+        <div class="card main-card shadow-sm border-0 mb-4">
+            <div class="card-header bg-dark text-white p-3">
+                <h5 class="mb-0">Select Criteria</h5>
+            </div>
+            <div class="card-body p-4">
+                <form id="searchForm" class="row g-3">
+                    <!-- Make Dropdown -->
+                    <div class="col-md-4">
+                        <label for="makeSelect" class="form-label fw-semibold">Car Make</label>
+                        <select id="makeSelect" class="form-select form-select-lg" required>
+                            <option value="">-- Select Make --</option>
+                            @if (ViewBag.Makes is not null)
+                            {
+                                @foreach (var make in ViewBag.Makes.EnumerateArray())
+                                {
+                                    <option value="@make.GetProperty("Make_ID").GetInt32()">@make.GetProperty("Make_Name").GetString()</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Year Input -->
+                    <div class="col-md-4">
+                        <label for="yearInput" class="form-label fw-semibold">Model Year</label>
+                        <input type="number" id="yearInput" class="form-control form-select-lg" min="1980" max="2027" placeholder="e.g. 2015" required />
+                    </div>
+
+                    <!-- Vehicle Type Dropdown -->
+                    <div class="col-md-4">
+                        <label for="typeSelect" class="form-label fw-semibold">Vehicle Type</label>
+                        <select id="typeSelect" class="form-select form-select-lg" disabled required>
+                            <option value="">-- Select Make First --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 text-end mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn" disabled>Search Models</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results Table Card -->
+        <div class="card main-card shadow-sm border-0 d-none" id="resultsCard">
+            <div class="card-header bg-success text-white p-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Matching Models</h5>
+                <span class="badge bg-light text-success fs-6" id="resultCount">0 Found</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Model ID</th>
+                                <th>Make Name</th>
+                                <th class="pe-4">Model Name</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelsTableBody">
+                            <!-- Populated Dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const makeSelect = document.getElementById('makeSelect');
+        const typeSelect = document.getElementById('typeSelect');
+        const yearInput = document.getElementById('yearInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultsCard = document.getElementById('resultsCard');
+        const modelsTableBody = document.getElementById('modelsTableBody');
+        const resultCount = document.getElementById('resultCount');
+
+        // Step 1: When Make changes, fetch corresponding Vehicle Types
+        makeSelect.addEventListener('change', async function() {
+            const makeId = this.value;
+            typeSelect.innerHTML = '<option value="">-- Select Type --</option>';
+            typeSelect.disabled = true;
+            submitBtn.disabled = true;
+
+            if (!makeId) return;
+
+            try {
+                const response = await fetch(`/Home/GetVehicleTypes?makeId=${makeId}`);
+                const data = await response.json();
+                
+                if (data.Results && data.Results.length > 0) {
+                    data.Results.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type.VehicleTypeName;
+                        option.textContent = type.VehicleTypeName;
+                        typeSelect.appendChild(option);
+                    });
+                    typeSelect.disabled = false;
+                    checkFormValidity();
+                } else {
+                    typeSelect.innerHTML = '<option value="">No vehicle types registered</option>';
+                }
+            } catch (error) {
+                console.error("Error retrieving vehicle types:", error);
+            }
+        });
+
+        yearInput.addEventListener('input', checkFormValidity);
+        typeSelect.addEventListener('change', checkFormValidity);
+
+        function checkFormValidity() {
+            submitBtn.disabled = !(makeSelect.value && yearInput.value && typeSelect.value);
+        }
+
+        // Step 2: Form execution / Model list display
+        document.getElementById('searchForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const makeId = makeSelect.value;
+            const year = yearInput.value;
+
+            modelsTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">Searching the NHTSA database...</td></tr>';
+            resultsCard.classList.remove('d-none');
+
+            try {
+                const response = await fetch(`/Home/GetModels?makeId=${makeId}&year=${year}`);
+                const data = await response.json();
+                
+                modelsTableBody.innerHTML = '';
+                const models = data.Results || [];
+
+                if (models.length > 0) {
+                    models.forEach(model => {
+                        const row = `<tr>
+                            <td class="ps-4"><code>\${model.Model_ID}</code></td>
+                            <td>\${model.Make_Name}</td>
+                            <td class="pe-4 fw-bold">\${model.Model_Name}</td>
+                        </tr>`;
+                        modelsTableBody.insertAdjacentHTML('beforeend', row);
+                    });
+                    resultCount.textContent = `\${models.length} Found`;
+                } else {
+                    modelsTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">No models found matching this criteria.</td></tr>';
+                    resultCount.textContent = '0 Found';
+                }
+            } catch (error) {
+                console.error("Error retrieving models:", error);
+                modelsTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-danger">Failed to fetch models. Please try again.</td></tr>';
+            }
+        });
+    </script>
+</body>
+</html>
